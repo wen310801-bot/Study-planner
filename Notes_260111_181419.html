@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2026 會考衝刺 App</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="2026計畫">
+    <meta name="theme-color" content="#a3b18a">
+
+    <style>
+        :root {
+            --bg: #f2f0eb;
+            --morandi-green: #a3b18a;
+            --morandi-blue: #97a7b3;
+            --morandi-brown: #b6ad90;
+            --text: #585858;
+            --white: #ffffff;
+            --border: #e0ddd5;
+            --today-stroke: #6b705c;
+        }
+
+        body {
+            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0; padding: 15px;
+            display: flex; justify-content: center;
+            /* 避免手機上滑動過度 */
+            overscroll-behavior-y: contain;
+        }
+
+        .container {
+            display: flex; gap: 20px;
+            max-width: 1200px; width: 100%;
+            height: 94vh;
+        }
+
+        .card {
+            background: var(--white); border-radius: 20px;
+            padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        }
+
+        /* 左側與右側版型同前，但微調邊距適合手機 */
+        .calendar-section { width: 400px; display: flex; flex-direction: column; gap: 15px; }
+        .month-picker { display: flex; justify-content: space-between; align-items: center; }
+        .month-title { font-size: 1.3rem; font-weight: bold; color: var(--morandi-green); }
+
+        .countdown-banner {
+            background: var(--morandi-brown); color: white;
+            text-align: center; padding: 10px; border-radius: 12px;
+            font-weight: bold; font-size: 1rem;
+        }
+
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; gap: 5px; }
+        .weekday { font-size: 0.7rem; color: #bbb; }
+        
+        .day {
+            padding: 10px 0; border-radius: 10px; cursor: pointer;
+            font-size: 0.9rem; position: relative; border: 1px solid transparent;
+        }
+        .day.is-today { border: 2px solid var(--today-stroke) !important; font-weight: bold; }
+        .day.selected { background: var(--morandi-green) !important; color: white !important; }
+        .day.all-done::before { content: '✅'; position: absolute; top: -5px; right: -2px; font-size: 0.7rem; }
+        .day.has-task::after {
+            content: ''; position: absolute; bottom: 4px; left: 50%;
+            transform: translateX(-50%); width: 4px; height: 4px;
+            background: var(--morandi-blue); border-radius: 50%;
+        }
+
+        .month-goal-area textarea {
+            width: 100%; height: 70px; border: 1px dashed var(--morandi-green);
+            border-radius: 10px; padding: 10px; margin-top: 5px;
+            box-sizing: border-box; resize: none; outline: none; background: #fafafa;
+        }
+
+        .content-section { flex: 1; display: flex; flex-direction: column; gap: 15px; }
+        .quote-box { background: var(--morandi-blue); color: white; padding: 12px; border-radius: 12px; font-style: italic; font-size: 0.9rem; }
+        
+        .task-list { margin-top: 10px; max-height: 180px; overflow-y: auto; }
+        .task-item { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f2f2f2; }
+        .task-item input { margin-right: 10px; transform: scale(1.1); }
+        .task-item.done span { text-decoration: line-through; color: #ccc; }
+
+        .input-group { display: flex; gap: 8px; margin-top: 10px; }
+        input[type="text"] { flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 16px; /* 避免 iPhone 自動放大 */ }
+
+        textarea.diary {
+            width: 100%; flex: 1; border: 1px solid var(--border);
+            border-radius: 15px; padding: 15px; outline: none; resize: none;
+            box-sizing: border-box; background: #fdfdfb; font-family: inherit; font-size: 16px;
+        }
+
+        .btn { background: var(--morandi-brown); color: white; border: none; padding: 8px 15px; border-radius: 8px; }
+
+        /* 手機直向適配 */
+        @media (max-width: 850px) {
+            .container { flex-direction: column; height: auto; }
+            .calendar-section { width: 100%; }
+            textarea.diary { min-height: 250px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="calendar-section">
+        <div class="card">
+            <div class="countdown-banner" id="countdown-text">載入中...</div>
+            <div class="month-picker">
+                <button onclick="changeMonth(-1)">◀</button>
+                <div class="month-title" id="display-month"></div>
+                <button onclick="changeMonth(1)">▶</button>
+            </div>
+            <div class="calendar-grid" id="calendar-grid"></div>
+        </div>
+        <div class="card month-goal-area">
+            <h4 style="margin:0; color:var(--morandi-green);">🎯 <span id="goal-month-label"></span>月總目標</h4>
+            <textarea id="month-goal-input" placeholder="本月衝刺目標..." oninput="saveMonthGoal()"></textarea>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <div class="card">
+            <div class="quote-box" id="quote-display">「所有的努力，都會在未來的某個時刻開花結果。」</div>
+            <h2 id="selected-date-title" style="margin: 15px 0 5px 0; font-size: 1.2rem;">請選擇日期</h2>
+            <div class="task-list" id="task-list"></div>
+            <div class="input-group">
+                <input type="text" id="task-input" placeholder="新增任務...">
+                <button class="btn" onclick="addTask()">新增</button>
+            </div>
+        </div>
+        <div class="card" style="flex: 1; display: flex; flex-direction: column;">
+            <h3 style="margin: 0 0 10px 0; font-size: 1rem;">📝 每日隨筆</h3>
+            <textarea class="diary" id="diary-input" placeholder="寫下心情..." oninput="saveDiary()"></textarea>
+        </div>
+    </div>
+</div>
+
+<script>
+    // JS 部分邏輯同前，但儲存 Key 改為 v5 避免混淆
+    let currentYear = 2026;
+    let currentMonth = new Date().getMonth();
+    let selectedDateKey = "";
+    let plannerData = JSON.parse(localStorage.getItem('planner_app_v5')) || { months: {} };
+
+    const quotes = [
+        "「不積跬步，無以至千里。」", "「現在的努力，是為了遇見更好的自己。」", 
+        "「自律的程度，決定你人生的高度。」", "「越努力，越幸運。」",
+        "「心之所向，素履以往。」", "「將來你會感謝現在拼命的自己。」"
+    ]; // (可自行補足至 30 句)
+
+    function updateCountdown() {
+        const examDate = new Date(2026, 4, 16);
+        const now = new Date();
+        const diff = Math.ceil((examDate - now) / (1000 * 60 * 60 * 24));
+        document.getElementById('countdown-text').innerText = diff > 0 ? `會考倒數：${diff} 天` : "加油！";
+    }
+
+    function initCalendar() {
+        const grid = document.getElementById('calendar-grid');
+        grid.innerHTML = "";
+        ['日','一','二','三','四','五','六'].forEach(w => grid.innerHTML += `<div class="weekday">${w}</div>`);
+        const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        const todayStr = `${new Date().getFullYear()}-${new Date().getMonth() + 1}-${new Date().getDate()}`;
+
+        for (let i = 0; i < firstDay; i++) grid.innerHTML += `<div></div>`;
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        document.getElementById('display-month').innerText = `${monthNames[currentMonth]} ${currentYear}`;
+        document.getElementById('goal-month-label').innerText = currentMonth + 1;
+        document.getElementById('month-goal-input').value = plannerData.months[`${currentYear}-${currentMonth+1}`] || "";
+
+        for (let i = 1; i <= daysInMonth; i++) {
+            const dateKey = `${currentYear}-${currentMonth + 1}-${i}`;
+            const dayDiv = document.createElement('div');
+            dayDiv.className = 'day';
+            dayDiv.innerText = i;
+            if (dateKey === todayStr) dayDiv.classList.add('is-today');
+            if (plannerData[dateKey]) {
+                dayDiv.classList.add('has-task');
+                if (checkAllDone(dateKey)) dayDiv.classList.add('all-done');
+            }
+            if (dateKey === selectedDateKey) dayDiv.classList.add('selected');
+            dayDiv.onclick = () => selectDate(dateKey, dayDiv);
+            grid.appendChild(dayDiv);
+        }
+    }
+
+    function checkAllDone(key) {
+        const day = plannerData[key];
+        return day && day.tasks && day.tasks.length > 0 && day.tasks.every(t => t.done);
+    }
+
+    function selectDate(key, element) {
+        selectedDateKey = key;
+        document.querySelectorAll('.day').forEach(d => d.classList.remove('selected'));
+        element.classList.add('selected');
+        document.getElementById('selected-date-title').innerText = key.split('-').slice(1).join('/') + ' 規劃';
+        document.getElementById('quote-display').innerText = quotes[Math.floor(Math.random() * quotes.length)];
+        renderTasks();
+        document.getElementById('diary-input').value = plannerData[key]?.diary || "";
+    }
+
+    function renderTasks() {
+        const list = document.getElementById('task-list');
+        list.innerHTML = "";
+        const tasks = plannerData[selectedDateKey]?.tasks || [];
+        tasks.forEach((t, i) => {
+            const div = document.createElement('div');
+            div.className = `task-item ${t.done ? 'done' : ''}`;
+            div.innerHTML = `<input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${i})"><span>${t.text}</span><button style="margin-left:auto;border:none;background:none;color:#ffadad;" onclick="delTask(${i})">✕</button>`;
+            list.appendChild(div);
+        });
+    }
+
+    function addTask() {
+        const input = document.getElementById('task-input');
+        if(!input.value || !selectedDateKey) return;
+        if(!plannerData[selectedDateKey]) plannerData[selectedDateKey] = { tasks: [], diary: "" };
+        plannerData[selectedDateKey].tasks.push({ text: input.value, done: false });
+        input.value = ""; save(); renderTasks(); initCalendar();
+    }
+
+    function toggleTask(i) {
+        plannerData[selectedDateKey].tasks[i].done = !plannerData[selectedDateKey].tasks[i].done;
+        save(); renderTasks(); initCalendar();
+    }
+
+    function delTask(i) {
+        plannerData[selectedDateKey].tasks.splice(i, 1);
+        save(); renderTasks(); initCalendar();
+    }
+
+    function saveMonthGoal() {
+        plannerData.months[`${currentYear}-${currentMonth+1}`] = document.getElementById('month-goal-input').value;
+        save();
+    }
+
+    function saveDiary() {
+        if(!selectedDateKey) return;
+        if(!plannerData[selectedDateKey]) plannerData[selectedDateKey] = { tasks: [], diary: "" };
+        plannerData[selectedDateKey].diary = document.getElementById('diary-input').value;
+        save();
+    }
+
+    function changeMonth(dir) {
+        currentMonth += dir;
+        if(currentMonth < 0) { currentMonth = 11; currentYear--; }
+        else if(currentMonth > 11) { currentMonth = 0; currentYear++; }
+        initCalendar();
+    }
+
+    function save() { localStorage.setItem('planner_app_v5', JSON.stringify(plannerData)); }
+
+    updateCountdown();
+    initCalendar();
+</script>
+</body>
+</html>
